@@ -16,7 +16,7 @@ ghcr.io/trustacks/runner, ghcr.io/trustacks/ui — are NOT covered by the
 Apache 2.0 license above. They are governed separately by the TruStacks
 End-User License Agreement (Beta), version 1.0:
 
-    https://trustacks.app/eula
+    https://trustacks.com/eula
 
 In summary (the EULA at the URL above is the binding text):
 
@@ -59,4 +59,4 @@ dotnet-hello, go-hello) are licensed under Apache License 2.0 and are
 intended to be forked freely by workshop attendees.
 
 Questions, EULA clarifications, or trademark queries:
-legal@trustacks.app
+legal@trustacks.com

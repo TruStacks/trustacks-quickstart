@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Initial scaffold (`install.sh`, `bootstrap.sh`, `helm/values-quickstart.yaml`, four polyglot samples, README, LICENSE, NOTICE).
-- Curl-pipe-bash entry at `https://trustacks.app/install` (renders to this repo's `install.sh`).
+- Curl-pipe-bash entry at `https://trustacks.com/install` (renders to this repo's `install.sh`).
 - BYO LLM key flow via the UI's *Settings → LLM Provider* page (per `trustacks-mvp` Slice 23.6).
 - Supply-chain verification command in the README (Sigstore keyless OIDC).
 

@@ -3,7 +3,7 @@
 > **Workshop + developer evaluation surface** for the TruStacks agentic platform. Single-node k3d local sandbox; runs on a MacBook in about 2 minutes. **Production hosting is separate** (GKE-hosted SaaS, launching 2026-07-27).
 
 ```sh
-curl -fsSL https://trustacks.app/install | bash
+curl -fsSL https://trustacks.com/install | bash
 ```
 
 That command pulls this repository, validates your local CLIs (Docker, k3d, kubectl, helm), creates a k3d cluster, installs the TruStacks control-plane + runner + UI from `ghcr.io/trustacks/*`, seeds four sample apps into a local Gitea, and prints URLs you can open in your browser. Bring your own Anthropic API key when you first run `/audit` or `/plan` — the UI's *Settings → LLM Provider* page handles it.
@@ -33,7 +33,7 @@ Each is a minimal "hello world" service the agent can analyze. Pick any one, run
 
 ## 15-minute workshop walkthrough
 
-1. **Install.** `curl -fsSL https://trustacks.app/install | bash` (≈ 2 min).
+1. **Install.** `curl -fsSL https://trustacks.com/install | bash` (≈ 2 min).
 2. **Open the UI** at `http://ui.localtest.me:8080`. Click **Settings → LLM Provider** and paste your Anthropic API key. The UI validates it with a live ping.
 3. **Run an audit.** Navigate to **/audit** and click *Run gap analysis*. The Coordinator + Baseline Security agents narrate the customer's gap report inline.
 4. **Pick a sample.** From the Services list, pick `sample-app-fastapi-hello`. The Code Reviewer agent has already analyzed it; click *Promote to proposal*.
@@ -58,7 +58,7 @@ Most quickstart users won't need to change anything. For procurement or pinned-v
 ```sh
 # Reproducible pinned install
 TRUSTACKS_VERSION=0.1.0 \
-    curl -fsSL https://trustacks.app/install | bash
+    curl -fsSL https://trustacks.com/install | bash
 ```
 
 ---
@@ -83,7 +83,7 @@ docker buildx imagetools inspect \
   --format '{{ json .SBOM }}'
 ```
 
-The signing identity is the publish workflow at `trustacks/trustacks-mvp/.github/workflows/publish-images.yml`. If verification fails, **don't run the image** — report to `security@trustacks.app`.
+The signing identity is the publish workflow at `trustacks/trustacks-mvp/.github/workflows/publish-images.yml`. If verification fails, **don't run the image** — report to `security@trustacks.com`.
 
 ---
 
@@ -126,7 +126,7 @@ Removes the cluster, the in-cluster Gitea repos, the cached images. Doesn't touc
 ## License + the bright line
 
 - **This repository** (install.sh, bootstrap.sh, helm/, samples/, README.md) — **Apache License 2.0**. Fork it, modify it, run it inside or outside your organization.
-- **The container images** at `ghcr.io/trustacks/*` — governed by the [TruStacks End-User License Agreement (Beta)](https://trustacks.app/eula). Permitted use covers evaluation, workshop, and local development on infrastructure you control. Not for production use during Beta; not for redistribution.
+- **The container images** at `ghcr.io/trustacks/*` — governed by the [TruStacks End-User License Agreement (Beta)](https://trustacks.com/eula). Permitted use covers evaluation, workshop, and local development on infrastructure you control. Not for production use during Beta; not for redistribution.
 - **The constitution Rego bundle + framework packs** — Apache 2.0, at https://github.com/TruStacks/trustacks-policy.
 - **The TruStacks trademark** — governed by https://github.com/TruStacks/trustacks-policy/blob/main/TRADEMARK.md.
 
@@ -140,15 +140,15 @@ See `LICENSE` and `NOTICE` in this repo for the full text.
 - **v0.2.x** — public OCI fallback for the constitution Rego bundle so the bootstrap doesn't need in-cluster Zot setup
 - **v0.x+** — Recommended-tools-on-/stack (Candidate M, in flight) + intent-state Promote action (Candidate N, queued) — these ship through `trustacks-mvp` image releases; this scaffold updates to surface them as they land
 
-See [`docs/phase-4-roadmap.md`](https://github.com/TruStacks/trustacks-mvp/blob/main/docs/phase-4-roadmap.md) — Candidate O for the full quickstart roadmap entry (currently access-restricted; mirror docs live at https://trustacks.app/docs).
+See [`docs/phase-4-roadmap.md`](https://github.com/TruStacks/trustacks-mvp/blob/main/docs/phase-4-roadmap.md) — Candidate O for the full quickstart roadmap entry (currently access-restricted; mirror docs live at https://trustacks.com/docs).
 
 ---
 
 ## Contact
 
-- **Workshop questions:** the Discord linked from https://trustacks.app
-- **Security / supply-chain:** security@trustacks.app
-- **License / trademark:** legal@trustacks.app
-- **Everything else:** hello@trustacks.app
+- **Workshop questions:** the Discord linked from https://trustacks.com
+- **Security / supply-chain:** security@trustacks.com
+- **License / trademark:** legal@trustacks.com
+- **Everything else:** hello@trustacks.com
 
 **Thanks for trying TruStacks.** Feedback from quickstart users shapes the 2026-07-27 Beta launch directly.
