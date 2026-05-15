@@ -2,9 +2,9 @@
 #
 # TruStacks Quickstart — one-line installer.
 #
-# Pulled by curl-pipe-bash from https://trustacks.app/install. Use:
+# Pulled by curl-pipe-bash from https://trustacks.com/install. Use:
 #
-#     curl -fsSL https://trustacks.app/install | bash
+#     curl -fsSL https://trustacks.com/install | bash
 #
 # What this script does (transparent + small enough to read):
 #
@@ -26,7 +26,7 @@
 #
 # Source: https://github.com/TruStacks/trustacks-quickstart
 # EULA (governs the images this script pulls):
-#   https://trustacks.app/eula
+#   https://trustacks.com/eula
 # Trademark policy:
 #   https://github.com/TruStacks/trustacks-policy/blob/main/TRADEMARK.md
 
@@ -73,7 +73,7 @@ say "  3. Hand off to bootstrap.sh to create the cluster + install TruStacks."
 say "  4. Print URLs you can open in your browser when it's ready."
 echo
 say "By proceeding you accept the TruStacks End-User License Agreement:"
-say "  ${DIM}https://trustacks.app/eula${RESET}"
+say "  ${DIM}https://trustacks.com/eula${RESET}"
 echo
 
 # ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ require kubectl "brew install kubectl  ·  https://kubernetes.io/docs/tasks/tool
 require helm    "brew install helm  ·  https://helm.sh/docs/intro/install/"        || missing=$((missing + 1))
 
 if [[ ${missing} -gt 0 ]]; then
-    die "${missing} prerequisite(s) missing. Install them and re-run ${BOLD}curl -fsSL https://trustacks.app/install | bash${RESET}."
+    die "${missing} prerequisite(s) missing. Install them and re-run ${BOLD}curl -fsSL https://trustacks.com/install | bash${RESET}."
 fi
 
 if ! docker info >/dev/null 2>&1; then

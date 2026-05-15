@@ -24,7 +24,7 @@
 #                             23.6's BYO-key flow).
 #
 # Source: https://github.com/TruStacks/trustacks-quickstart
-# EULA: https://trustacks.app/eula
+# EULA: https://trustacks.com/eula
 
 set -euo pipefail
 
@@ -148,7 +148,7 @@ Next steps once Phase A2 ships the Helm bundle:
 Cleanup when you're done:
   ${DIM}k3d cluster delete ${CLUSTER_NAME}${RESET}
 
-Trouble?  https://trustacks.app/docs/workshop  ·  https://github.com/TruStacks/trustacks-quickstart/issues
+Trouble?  https://trustacks.com/docs/workshop  ·  https://github.com/TruStacks/trustacks-quickstart/issues
 
 Thanks for trying TruStacks. ${BOLD}Feedback shapes the Beta launch on 2026-07-27.${RESET}
 EOF
