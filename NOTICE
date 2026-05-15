@@ -1,0 +1,62 @@
+TruStacks Quickstart
+====================
+
+Copyright (c) 2026 TruStacks, Inc.
+
+The contents of THIS repository (install.sh, bootstrap.sh, helm/*,
+samples/*, README.md, and other scaffold files) are licensed under the
+Apache License, Version 2.0. See the LICENSE file alongside this
+NOTICE for the full text.
+
+  - You may freely fork, modify, audit, and redistribute the scripts
+    in this repository under the Apache 2.0 terms.
+
+The container images this scaffold pulls — ghcr.io/trustacks/control-plane,
+ghcr.io/trustacks/runner, ghcr.io/trustacks/ui — are NOT covered by the
+Apache 2.0 license above. They are governed separately by the TruStacks
+End-User License Agreement (Beta), version 1.0:
+
+    https://trustacks.app/eula
+
+In summary (the EULA at the URL above is the binding text):
+
+  - Use of the images is granted during the Beta program for evaluation,
+    workshop attendance, and local development on infrastructure you
+    control.
+  - Redistribution of the images outside your own infrastructure is not
+    permitted.
+  - Reverse engineering of the images for the purpose of building a
+    competing product is not permitted.
+  - The "TruStacks" name, logo, and trade dress are trademarks of
+    TruStacks, Inc.; trademark policy lives at:
+    https://github.com/TruStacks/trustacks-policy/blob/main/TRADEMARK.md
+
+Each TruStacks image is signed via Sigstore keyless OIDC. Verify with:
+
+    cosign verify \
+      --certificate-identity-regexp \
+        'https://github.com/trustacks/trustacks-mvp/.github/workflows/publish-images.yml@.*' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      ghcr.io/trustacks/<image>:<version>
+
+SBOMs are attached to each image manifest via buildx's `sbom: true`
+output. Query with:
+
+    docker buildx imagetools inspect \
+      ghcr.io/trustacks/<image>:<version> \
+      --format '{{ json .SBOM }}'
+
+Open-source components shipped INSIDE the TruStacks images under their
+own licenses (Apache 2.0 unless otherwise noted):
+
+  - Constitution Rego bundle + framework packs:
+    https://github.com/TruStacks/trustacks-policy
+  - Third-party libraries vendored inside each image: enumerated in the
+    SBOM accessible via the command above.
+
+The sample applications in samples/* (fastapi-hello, spring-boot-hello,
+dotnet-hello, go-hello) are licensed under Apache License 2.0 and are
+intended to be forked freely by workshop attendees.
+
+Questions, EULA clarifications, or trademark queries:
+legal@trustacks.app

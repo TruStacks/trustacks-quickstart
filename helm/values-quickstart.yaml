@@ -1,0 +1,59 @@
+# TruStacks Quickstart — Helm values overrides for single-node k3d.
+#
+# These overrides tune the production Helm chart for the workshop /
+# evaluation case:
+#   - One replica per service (no HA; this is a sandbox).
+#   - Public GHCR image references (no private-registry pulls).
+#   - BYO LLM key flow surfaced as the first-run setup step in the UI.
+#   - Sample repos pre-seeded into the local Gitea so the agent has
+#     something to analyze without the customer connecting their own.
+#
+# Pinning: the bootstrap script picks up TRUSTACKS_VERSION env var
+# (defaults to `latest`) and sets image.<service>.tag at install time.
+# For procurement-minded customers who want a specific tag:
+#   TRUSTACKS_VERSION=0.1.0 ./bootstrap.sh
+
+image:
+  controlPlane:
+    repository: ghcr.io/trustacks/control-plane
+    tag: latest   # overridden by bootstrap.sh per TRUSTACKS_VERSION
+    pullPolicy: IfNotPresent
+  runner:
+    repository: ghcr.io/trustacks/runner
+    tag: latest
+    pullPolicy: IfNotPresent
+  ui:
+    repository: ghcr.io/trustacks/ui
+    tag: latest
+    pullPolicy: IfNotPresent
+
+replicas:
+  controlPlane: 1
+  runner: 1
+  ui: 1
+
+# BYO LLM key flow — the UI's Settings → LLM Provider page handles
+# this end-to-end (Slice 23.6). At bootstrap time we deliberately
+# don't bake any key in; the customer pastes theirs at first /audit.
+llm:
+  provider: anthropic   # or "openrouter"; both route to Claude Sonnet 4.5+
+  byoKey: true          # quickstart-mode always BYO; managed-Workspace lives in the hosted SaaS
+
+# Sample seeding — pre-populate the in-cluster Gitea with the four
+# polyglot demo repos so workshop attendees have something to /plan
+# against without needing to connect their own repo first.
+samples:
+  seed: true
+  repos:
+    - fastapi-hello
+    - spring-boot-hello
+    - dotnet-hello
+    - go-hello
+
+# Ingress shape — k3d's built-in load balancer forwards :8080 to
+# everything via *.localtest.me hostnames. ServiceLB handles routing;
+# no separate ingress controller needed for the quickstart.
+ingress:
+  enabled: true
+  hostnameSuffix: localtest.me
+  port: 8080

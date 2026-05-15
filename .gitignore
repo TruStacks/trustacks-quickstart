@@ -1,0 +1,24 @@
+# trustacks-quickstart — workshop install scaffold for TruStacks
+# Local-state artifacts that should never land in the public repo.
+
+# k3d-generated kubeconfig snippets (per-run)
+kubeconfig
+kubeconfig-*.yaml
+*.kubeconfig
+
+# Local secrets (workshop attendees may stash an Anthropic key here)
+.env
+.env.local
+*.local.env
+
+# Editor + OS noise
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Built artifacts (none today; reserved for future helm/quickstart-<ver>.tgz)
+dist/
+charts/*/charts/
+charts/*/Chart.lock
