@@ -25,15 +25,27 @@ image:
   controlPlane:
     repository: ghcr.io/trustacks/control-plane
     tag: latest
-    pullPolicy: IfNotPresent
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
   runner:
     repository: ghcr.io/trustacks/runner
     tag: latest
-    pullPolicy: IfNotPresent
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
   ui:
     repository: ghcr.io/trustacks/ui
     tag: latest
-    pullPolicy: IfNotPresent
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
 
 replicas:
   controlPlane: 1
@@ -79,7 +91,14 @@ policyBundle:
   # Sigstore Fulcio + Rekor.
   verify: true
   keyless:
-    certificateIdentityRegexp: 'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@.*'
+    # Restrict to refs the publish workflow actually fires on
+    # (semver tag pushes, per `.github/workflows/publish-policy.yml`'s
+    # `on: push: tags: v*.*.*`). The workflow itself rejects non-tag
+    # refs at the version-resolution step, but tightening the
+    # verification regex is defense-in-depth — a misconfigured or
+    # post-hoc workflow run on a branch can't produce a verify-pass
+    # bundle even if it somehow got signed.
+    certificateIdentityRegexp: 'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
     certificateOidcIssuer: https://token.actions.githubusercontent.com
 
 # ---------------------------------------------------------------------
@@ -187,7 +206,11 @@ runner:
 
   deployKeyLoader:
     image: alpine/k8s:1.31.4
-    pullPolicy: IfNotPresent
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
 
   giteaApiToken:
     secretName: gitea-api-token

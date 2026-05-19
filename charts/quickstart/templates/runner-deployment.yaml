@@ -87,89 +87,147 @@ spec:
               set -u
               {{- $orasFlags := ternary "--plain-http " "" .Values.policyBundle.insecure }}
               {{- $allowHttp := ternary "--allow-http-registry " "" .Values.policyBundle.insecure }}
-              # ---- Constitution ---------------------------------------
+
+              # ---- Helpers -------------------------------------------
+              # Resolve a tag-form OCI ref to its current digest.
+              # Echoes the digest on success; non-zero exit on failure.
+              # Used to anchor pull + verify to the same bytes — anti-
+              # TOCTOU if the tag is rewritten between the two.
+              resolve_digest() {
+                local ref="$1"
+                oras resolve {{ $orasFlags }}"$ref" 2>/dev/null
+              }
+
+              # Strip the :tag suffix from a tag-form ref so we can
+              # append @<digest>. Assumes tag-form input (the chart's
+              # values.yaml default); a digest-form input would not
+              # reach this helper because resolve_digest's caller would
+              # use the ref unchanged.
+              repo_of() {
+                local ref="$1"
+                echo "${ref%:*}"
+              }
+
+              # Extract every .tar.gz under $1; on any tar failure,
+              # purge $1 so the evaluator falls back to image-baked
+              # rego instead of treating partial state as authoritative.
+              extract_or_purge() {
+                local dest="$1"
+                local label="$2"
+                local found=0
+                while IFS= read -r tgz; do
+                  found=1
+                  if ! tar -xzf "$tgz" -C "$dest"; then
+                    echo "[load-policy-bundle] $label tar extract FAILED for $tgz — purging $dest"
+                    rm -rf "$dest"
+                    return 1
+                  fi
+                  rm -f "$tgz"
+                done < <(find "$dest" -maxdepth 1 -type f -name '*.tar.gz')
+                if [ "$found" -eq 0 ]; then
+                  echo "[load-policy-bundle] $label no tarball found in $dest — leaving as-is"
+                fi
+                return 0
+              }
+
+              # ---- Constitution --------------------------------------
               mkdir -p /policy-runtime/constitution
-              if ! oras pull {{ $orasFlags }}-o /policy-runtime/constitution {{ .Values.policyBundle.bundleRef | quote }}; then
-                echo "[load-policy-bundle] constitution oras pull failed — falling back to image-baked /etc/trustacks/policy"
+              CONST_REF={{ .Values.policyBundle.bundleRef | quote }}
+              CONST_DIGEST="$(resolve_digest "$CONST_REF" || true)"
+              if [ -z "$CONST_DIGEST" ]; then
+                echo "[load-policy-bundle] constitution oras resolve failed for $CONST_REF — falling back to image-baked /etc/trustacks/policy"
                 rm -rf /policy-runtime/constitution
               else
-                {{- if .Values.policyBundle.verify }}
-                {{- if .Values.policyBundle.keyless }}
-                # Sigstore keyless OIDC verify against the workflow
-                # identity. No --insecure-ignore-tlog — we want Rekor
-                # transparency log verification.
-                if ! cosign verify {{ $allowHttp }}\
-                    --certificate-identity-regexp {{ .Values.policyBundle.keyless.certificateIdentityRegexp | quote }} \
-                    --certificate-oidc-issuer {{ .Values.policyBundle.keyless.certificateOidcIssuer | quote }} \
-                    {{ .Values.policyBundle.bundleRef | quote }} >/dev/null 2>&1; then
-                  echo "[load-policy-bundle] constitution cosign keyless verify FAILED — falling back to image-baked /etc/trustacks/policy"
+                # Pin to digest for both pull and verify so a retag
+                # between the two can't slip un-verified bytes through.
+                CONST_PINNED="$(repo_of "$CONST_REF")@$CONST_DIGEST"
+                if ! oras pull {{ $orasFlags }}-o /policy-runtime/constitution "$CONST_PINNED"; then
+                  echo "[load-policy-bundle] constitution oras pull failed for $CONST_PINNED — falling back to image-baked /etc/trustacks/policy"
                   rm -rf /policy-runtime/constitution
                 else
-                  echo "[load-policy-bundle] constitution cosign keyless verify OK"
+                  {{- if .Values.policyBundle.verify }}
+                  {{- if .Values.policyBundle.keyless }}
+                  # Sigstore keyless OIDC verify against the workflow
+                  # identity. No --insecure-ignore-tlog — we want Rekor
+                  # transparency log verification.
+                  if ! cosign verify {{ $allowHttp }}\
+                      --certificate-identity-regexp {{ .Values.policyBundle.keyless.certificateIdentityRegexp | quote }} \
+                      --certificate-oidc-issuer {{ .Values.policyBundle.keyless.certificateOidcIssuer | quote }} \
+                      "$CONST_PINNED" >/dev/null 2>&1; then
+                    echo "[load-policy-bundle] constitution cosign keyless verify FAILED — falling back to image-baked /etc/trustacks/policy"
+                    rm -rf /policy-runtime/constitution
+                  else
+                    echo "[load-policy-bundle] constitution cosign keyless verify OK ($CONST_DIGEST)"
+                  fi
+                  {{- else }}
+                  # Keyed verify path — used by the mvp full install
+                  # pulling from in-cluster Zot. Requires the policy-pub
+                  # ConfigMap to be present.
+                  if [ ! -f /policy-pub/cosign.pub ]; then
+                    echo "[load-policy-bundle] policy-pub ConfigMap not mounted — falling back"
+                    rm -rf /policy-runtime/constitution
+                  elif ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
+                      --key /policy-pub/cosign.pub \
+                      "$CONST_PINNED" >/dev/null 2>&1; then
+                    echo "[load-policy-bundle] constitution cosign keyed verify FAILED — falling back to image-baked /etc/trustacks/policy"
+                    rm -rf /policy-runtime/constitution
+                  else
+                    echo "[load-policy-bundle] constitution cosign keyed verify OK ($CONST_DIGEST)"
+                  fi
+                  {{- end }}
+                  {{- else }}
+                  echo "[load-policy-bundle] policyBundle.verify disabled — skipping signature check"
+                  {{- end }}
                 fi
-                {{- else }}
-                # Keyed verify path — used by the mvp full install pulling
-                # from in-cluster Zot. Requires the policy-pub ConfigMap
-                # to be present.
-                if [ ! -f /policy-pub/cosign.pub ]; then
-                  echo "[load-policy-bundle] policy-pub ConfigMap not mounted — falling back"
-                  rm -rf /policy-runtime/constitution
-                elif ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
-                    --key /policy-pub/cosign.pub \
-                    {{ .Values.policyBundle.bundleRef | quote }} >/dev/null 2>&1; then
-                  echo "[load-policy-bundle] constitution cosign keyed verify FAILED — falling back to image-baked /etc/trustacks/policy"
-                  rm -rf /policy-runtime/constitution
-                else
-                  echo "[load-policy-bundle] constitution cosign keyed verify OK"
-                fi
-                {{- end }}
-                {{- else }}
-                echo "[load-policy-bundle] policyBundle.verify disabled — skipping signature check"
-                {{- end }}
               fi
               if [ -d /policy-runtime/constitution ]; then
-                find /policy-runtime/constitution -maxdepth 1 -type f -name '*.tar.gz' | while read -r tgz; do
-                  tar -xzf "$tgz" -C /policy-runtime/constitution
-                  rm -f "$tgz"
-                done
-                echo "[load-policy-bundle] constitution ready at /policy-runtime/constitution"
+                if extract_or_purge /policy-runtime/constitution constitution; then
+                  echo "[load-policy-bundle] constitution ready at /policy-runtime/constitution"
+                fi
               fi
+
               {{- if .Values.policyBundle.overlayRef }}
-              # ---- Customer overlay (optional) ------------------------
+              # ---- Customer overlay (optional) -----------------------
               mkdir -p /policy-runtime/overlay
-              if ! oras pull {{ $orasFlags }}-o /policy-runtime/overlay {{ .Values.policyBundle.overlayRef | quote }}; then
-                echo "[load-policy-bundle] overlay oras pull failed — skipping overlay (constitution still active)"
+              OVERLAY_REF={{ .Values.policyBundle.overlayRef | quote }}
+              OVERLAY_DIGEST="$(resolve_digest "$OVERLAY_REF" || true)"
+              if [ -z "$OVERLAY_DIGEST" ]; then
+                echo "[load-policy-bundle] overlay oras resolve failed for $OVERLAY_REF — skipping overlay (constitution still active)"
                 rm -rf /policy-runtime/overlay
               else
-                {{- if .Values.policyBundle.verify }}
-                {{- if .Values.policyBundle.keyless }}
-                if ! cosign verify {{ $allowHttp }}\
-                    --certificate-identity-regexp {{ .Values.policyBundle.keyless.certificateIdentityRegexp | quote }} \
-                    --certificate-oidc-issuer {{ .Values.policyBundle.keyless.certificateOidcIssuer | quote }} \
-                    {{ .Values.policyBundle.overlayRef | quote }} >/dev/null 2>&1; then
-                  echo "[load-policy-bundle] overlay cosign keyless verify FAILED — skipping overlay"
+                OVERLAY_PINNED="$(repo_of "$OVERLAY_REF")@$OVERLAY_DIGEST"
+                if ! oras pull {{ $orasFlags }}-o /policy-runtime/overlay "$OVERLAY_PINNED"; then
+                  echo "[load-policy-bundle] overlay oras pull failed for $OVERLAY_PINNED — skipping overlay"
                   rm -rf /policy-runtime/overlay
                 else
-                  echo "[load-policy-bundle] overlay cosign keyless verify OK"
+                  {{- if .Values.policyBundle.verify }}
+                  {{- if .Values.policyBundle.keyless }}
+                  if ! cosign verify {{ $allowHttp }}\
+                      --certificate-identity-regexp {{ .Values.policyBundle.keyless.certificateIdentityRegexp | quote }} \
+                      --certificate-oidc-issuer {{ .Values.policyBundle.keyless.certificateOidcIssuer | quote }} \
+                      "$OVERLAY_PINNED" >/dev/null 2>&1; then
+                    echo "[load-policy-bundle] overlay cosign keyless verify FAILED — skipping overlay"
+                    rm -rf /policy-runtime/overlay
+                  else
+                    echo "[load-policy-bundle] overlay cosign keyless verify OK ($OVERLAY_DIGEST)"
+                  fi
+                  {{- else }}
+                  if ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
+                      --key /policy-pub/cosign.pub \
+                      "$OVERLAY_PINNED" >/dev/null 2>&1; then
+                    echo "[load-policy-bundle] overlay cosign keyed verify FAILED — skipping overlay"
+                    rm -rf /policy-runtime/overlay
+                  else
+                    echo "[load-policy-bundle] overlay cosign keyed verify OK ($OVERLAY_DIGEST)"
+                  fi
+                  {{- end }}
+                  {{- end }}
                 fi
-                {{- else }}
-                if ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
-                    --key /policy-pub/cosign.pub \
-                    {{ .Values.policyBundle.overlayRef | quote }} >/dev/null 2>&1; then
-                  echo "[load-policy-bundle] overlay cosign keyed verify FAILED — skipping overlay"
-                  rm -rf /policy-runtime/overlay
-                else
-                  echo "[load-policy-bundle] overlay cosign keyed verify OK"
-                fi
-                {{- end }}
-                {{- end }}
               fi
               if [ -d /policy-runtime/overlay ]; then
-                find /policy-runtime/overlay -maxdepth 1 -type f -name '*.tar.gz' | while read -r tgz; do
-                  tar -xzf "$tgz" -C /policy-runtime/overlay
-                  rm -f "$tgz"
-                done
-                echo "[load-policy-bundle] overlay ready at /policy-runtime/overlay"
+                if extract_or_purge /policy-runtime/overlay overlay; then
+                  echo "[load-policy-bundle] overlay ready at /policy-runtime/overlay"
+                fi
               fi
               {{- end }}
               echo "[load-policy-bundle] tree:"

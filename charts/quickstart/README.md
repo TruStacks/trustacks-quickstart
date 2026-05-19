@@ -13,8 +13,15 @@ CP in that shape). See `values.yaml`'s `mode:` field for the marker.
 
 ## Quick start
 
-The canonical entrypoint is `bootstrap.sh` at the root of this repo,
-which runs `helm install` for you. For direct chart installation:
+> **Status (A2.2):** the chart is installable via direct `helm` commands as
+> shown below. The `bootstrap.sh` wrapper at the root of this repo (which
+> will run the prereq checks + the chart install + the post-install
+> seeding) lands in A2.3 — until then it still emits a TODO warning at
+> the install step. Use the direct `helm` flow below.
+
+Once A2.3 ships, `bootstrap.sh` becomes the canonical one-shot
+entrypoint. For direct chart installation today (and as a contributor
+debugging path even after A2.3):
 
 ```bash
 # From the root of this repo:
