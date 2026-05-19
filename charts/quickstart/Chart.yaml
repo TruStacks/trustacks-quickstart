@@ -1,0 +1,55 @@
+apiVersion: v2
+name: trustacks-quickstart
+description: |
+  TruStacks workshop / evaluation chart — installs control-plane, runner,
+  UI, gitea, and ArgoCD into a single k3d cluster so an attendee can run
+  the agent loop (/audit → /plan → PR → ArgoCD sync) end-to-end without
+  any TruStacks-hosted SaaS dependency.
+
+  This is the "all-in-one workshop topology" (per docs/co-development.md
+  topology table). The production Developer-tier SaaS chart (John's
+  Slice 22.5 + Slice 23 work) will be a different chart with multi-tenant
+  CP, externalized secrets, GKE-shaped ingress, and no UI deployment
+  (UI lives with the hosted CP in that shape). Don't try to make one
+  chart serve both surfaces.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+
+maintainers:
+  - name: TruStacks
+    url: https://trustacks.com
+
+home: https://trustacks.com
+sources:
+  - https://github.com/TruStacks/trustacks-quickstart
+  - https://github.com/TruStacks/trustacks-mvp
+
+annotations:
+  # OCI annotations that propagate to `helm pull oci://...` consumers.
+  # The quickstart chart itself isn't published to an OCI registry yet —
+  # vendored-in-source-tree distribution is enough for the workshop —
+  # but these stamp the chart with the same provenance metadata the
+  # container images carry (Candidate O Phase A).
+  app.trustacks.eula: https://trustacks.com/eula
+  org.opencontainers.image.licenses: Apache-2.0
+
+# Subcharts pulled at `helm dep update` time. Both are vendored from
+# their upstream repos at the versions pinned below.
+#
+#   gitea     — git provider for sample repos + the platform repo the
+#               DevOps Engineer agent opens PRs against. Workshop
+#               attendees see the agent's emit as a real PR.
+#   argo-cd   — GitOps watcher that auto-syncs the platform repo's
+#               merged PRs into the cluster. Closes the demo loop from
+#               "agent emits PR" through "service deployed".
+dependencies:
+  - name: gitea
+    version: "10.4.1"
+    repository: https://dl.gitea.com/charts/
+    condition: gitea.enabled
+  - name: argo-cd
+    version: "7.6.12"
+    repository: https://argoproj.github.io/argo-helm
+    condition: argo-cd.enabled

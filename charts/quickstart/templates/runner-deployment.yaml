@@ -1,0 +1,302 @@
+{{/*
+Runner Deployment.
+
+Ported from trustacks-mvp/charts/runner/templates/deployment.yaml with
+two adaptations for the workshop topology:
+
+  1. Image refs come from `.Values.image.runner.*` (umbrella chart
+     shape) instead of `.Values.image.*`.
+
+  2. The `load-policy-bundle` init container supports BOTH keyless
+     (workshop default, public GHCR) and keyed (mvp-compatible,
+     in-cluster Zot) cosign verification, selected by whether
+     `.Values.policyBundle.keyless` is set.
+
+Other behavior — deploy-key loader, env vars, mounts, optional secrets —
+matches mvp exactly so the runner image's runtime behavior is the same.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "runner") | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas.runner }}
+  selector:
+    matchLabels: {{- include "quickstart.serviceSelectorLabels" (dict "service" "runner") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "quickstart.serviceSelectorLabels" (dict "service" "runner") | nindent 8 }}
+    spec:
+      serviceAccountName: runner
+      securityContext: {{- toYaml .Values.runner.podSecurityContext | nindent 8 }}
+      initContainers:
+        # ----- 1. Deploy-key loader ------------------------------------
+        # Discover Secrets labeled `trustacks.io/role=git-deploy-key` and
+        # materialize each one at /git-keys/<repo>/{ssh-privatekey,
+        # known_hosts}. Lets Connect-a-repo wizard additions get picked
+        # up by rolling the runner — no helm upgrade required.
+        - name: load-deploy-keys
+          image: {{ .Values.runner.deployKeyLoader.image | quote }}
+          imagePullPolicy: {{ .Values.runner.deployKeyLoader.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              mkdir -p /git-keys
+              SECRETS=$(kubectl -n {{ .Release.Namespace }} get secrets \
+                -l trustacks.io/role=git-deploy-key \
+                -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+              if [ -z "$SECRETS" ]; then
+                echo "[load-deploy-keys] no labeled deploy-key Secrets found yet"
+                exit 0
+              fi
+              for name in $SECRETS; do
+                repo=$(kubectl -n {{ .Release.Namespace }} get secret "$name" \
+                  -o jsonpath='{.metadata.labels.trustacks\.io/repo}')
+                if [ -z "$repo" ]; then
+                  echo "[load-deploy-keys] skip $name (missing trustacks.io/repo label)"
+                  continue
+                fi
+                mkdir -p "/git-keys/$repo"
+                kubectl -n {{ .Release.Namespace }} get secret "$name" \
+                  -o jsonpath='{.data.ssh-privatekey}' | base64 -d \
+                  > "/git-keys/$repo/ssh-privatekey"
+                kubectl -n {{ .Release.Namespace }} get secret "$name" \
+                  -o jsonpath='{.data.known_hosts}' | base64 -d \
+                  > "/git-keys/$repo/known_hosts"
+                chmod 0400 "/git-keys/$repo/ssh-privatekey"
+                echo "[load-deploy-keys] mounted $repo from $name"
+              done
+          securityContext: {{- toYaml .Values.runner.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: deploy-keys
+              mountPath: /git-keys
+        # ----- 2. Constitution Rego bundle loader ----------------------
+        # Uses the runner image (oras + cosign baked in). On any failure
+        # (oras pull, cosign verify) we leave /policy-runtime/constitution
+        # empty; the evaluator falls back to the rego baked into the
+        # image. Image-baked content is implicitly trusted (immutable).
+        - name: load-policy-bundle
+          image: "{{ .Values.image.runner.repository }}:{{ .Values.image.runner.tag }}"
+          imagePullPolicy: {{ .Values.image.runner.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -u
+              {{- $orasFlags := ternary "--plain-http " "" .Values.policyBundle.insecure }}
+              {{- $allowHttp := ternary "--allow-http-registry " "" .Values.policyBundle.insecure }}
+              # ---- Constitution ---------------------------------------
+              mkdir -p /policy-runtime/constitution
+              if ! oras pull {{ $orasFlags }}-o /policy-runtime/constitution {{ .Values.policyBundle.bundleRef | quote }}; then
+                echo "[load-policy-bundle] constitution oras pull failed — falling back to image-baked /etc/trustacks/policy"
+                rm -rf /policy-runtime/constitution
+              else
+                {{- if .Values.policyBundle.verify }}
+                {{- if .Values.policyBundle.keyless }}
+                # Sigstore keyless OIDC verify against the workflow
+                # identity. No --insecure-ignore-tlog — we want Rekor
+                # transparency log verification.
+                if ! cosign verify {{ $allowHttp }}\
+                    --certificate-identity-regexp {{ .Values.policyBundle.keyless.certificateIdentityRegexp | quote }} \
+                    --certificate-oidc-issuer {{ .Values.policyBundle.keyless.certificateOidcIssuer | quote }} \
+                    {{ .Values.policyBundle.bundleRef | quote }} >/dev/null 2>&1; then
+                  echo "[load-policy-bundle] constitution cosign keyless verify FAILED — falling back to image-baked /etc/trustacks/policy"
+                  rm -rf /policy-runtime/constitution
+                else
+                  echo "[load-policy-bundle] constitution cosign keyless verify OK"
+                fi
+                {{- else }}
+                # Keyed verify path — used by the mvp full install pulling
+                # from in-cluster Zot. Requires the policy-pub ConfigMap
+                # to be present.
+                if [ ! -f /policy-pub/cosign.pub ]; then
+                  echo "[load-policy-bundle] policy-pub ConfigMap not mounted — falling back"
+                  rm -rf /policy-runtime/constitution
+                elif ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
+                    --key /policy-pub/cosign.pub \
+                    {{ .Values.policyBundle.bundleRef | quote }} >/dev/null 2>&1; then
+                  echo "[load-policy-bundle] constitution cosign keyed verify FAILED — falling back to image-baked /etc/trustacks/policy"
+                  rm -rf /policy-runtime/constitution
+                else
+                  echo "[load-policy-bundle] constitution cosign keyed verify OK"
+                fi
+                {{- end }}
+                {{- else }}
+                echo "[load-policy-bundle] policyBundle.verify disabled — skipping signature check"
+                {{- end }}
+              fi
+              if [ -d /policy-runtime/constitution ]; then
+                find /policy-runtime/constitution -maxdepth 1 -type f -name '*.tar.gz' | while read -r tgz; do
+                  tar -xzf "$tgz" -C /policy-runtime/constitution
+                  rm -f "$tgz"
+                done
+                echo "[load-policy-bundle] constitution ready at /policy-runtime/constitution"
+              fi
+              {{- if .Values.policyBundle.overlayRef }}
+              # ---- Customer overlay (optional) ------------------------
+              mkdir -p /policy-runtime/overlay
+              if ! oras pull {{ $orasFlags }}-o /policy-runtime/overlay {{ .Values.policyBundle.overlayRef | quote }}; then
+                echo "[load-policy-bundle] overlay oras pull failed — skipping overlay (constitution still active)"
+                rm -rf /policy-runtime/overlay
+              else
+                {{- if .Values.policyBundle.verify }}
+                {{- if .Values.policyBundle.keyless }}
+                if ! cosign verify {{ $allowHttp }}\
+                    --certificate-identity-regexp {{ .Values.policyBundle.keyless.certificateIdentityRegexp | quote }} \
+                    --certificate-oidc-issuer {{ .Values.policyBundle.keyless.certificateOidcIssuer | quote }} \
+                    {{ .Values.policyBundle.overlayRef | quote }} >/dev/null 2>&1; then
+                  echo "[load-policy-bundle] overlay cosign keyless verify FAILED — skipping overlay"
+                  rm -rf /policy-runtime/overlay
+                else
+                  echo "[load-policy-bundle] overlay cosign keyless verify OK"
+                fi
+                {{- else }}
+                if ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
+                    --key /policy-pub/cosign.pub \
+                    {{ .Values.policyBundle.overlayRef | quote }} >/dev/null 2>&1; then
+                  echo "[load-policy-bundle] overlay cosign keyed verify FAILED — skipping overlay"
+                  rm -rf /policy-runtime/overlay
+                else
+                  echo "[load-policy-bundle] overlay cosign keyed verify OK"
+                fi
+                {{- end }}
+                {{- end }}
+              fi
+              if [ -d /policy-runtime/overlay ]; then
+                find /policy-runtime/overlay -maxdepth 1 -type f -name '*.tar.gz' | while read -r tgz; do
+                  tar -xzf "$tgz" -C /policy-runtime/overlay
+                  rm -f "$tgz"
+                done
+                echo "[load-policy-bundle] overlay ready at /policy-runtime/overlay"
+              fi
+              {{- end }}
+              echo "[load-policy-bundle] tree:"
+              ls -la /policy-runtime
+              [ -d /policy-runtime/constitution ] && ls -la /policy-runtime/constitution || true
+              [ -d /policy-runtime/overlay ] && ls -la /policy-runtime/overlay || true
+              # Always exit 0 — partial loads are fine.
+              exit 0
+          securityContext: {{- toYaml .Values.runner.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: policy-runtime
+              mountPath: /policy-runtime
+            {{- if and .Values.policyBundle.verify (not .Values.policyBundle.keyless) }}
+            - name: policy-pub
+              mountPath: /policy-pub
+              readOnly: true
+            {{- end }}
+      containers:
+        - name: runner
+          image: "{{ .Values.image.runner.repository }}:{{ .Values.image.runner.tag }}"
+          imagePullPolicy: {{ .Values.image.runner.pullPolicy }}
+          securityContext: {{- toYaml .Values.runner.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            {{- range $k, $v := .Values.runner.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- /*
+              Slice 23.6 BYO LLM key wiring — env vars read from the
+              CP-managed Secret. All four optional so a fresh cluster
+              installs cleanly before the customer's first save.
+            */}}
+            {{- if .Values.runner.llmSecretName }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.runner.llmSecretName }}
+                  key: ANTHROPIC_API_KEY
+                  optional: true
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.runner.llmSecretName }}
+                  key: OPENROUTER_API_KEY
+                  optional: true
+            - name: TRUSTACKS_RUNNER_LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.runner.llmSecretName }}
+                  key: LLM_PROVIDER
+                  optional: true
+            - name: OPENROUTER_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.runner.llmSecretName }}
+                  key: OPENROUTER_MODEL
+                  optional: true
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources: {{- toYaml .Values.runner.resources | nindent 12 }}
+          volumeMounts:
+            - name: work
+              mountPath: /var/run/trustacks/work
+            - name: tmp
+              mountPath: /tmp
+            - name: deploy-keys
+              mountPath: /var/run/secrets/git
+              readOnly: true
+            - name: policy-runtime
+              mountPath: /etc/trustacks/policy-runtime
+              readOnly: true
+            {{- if .Values.runner.giteaApiToken }}
+            - name: gitea-api-token
+              mountPath: /var/run/secrets/gitea
+              readOnly: true
+            {{- end }}
+            {{- if .Values.runner.githubApp }}
+            - name: github-app
+              mountPath: /var/run/secrets/github-app
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: deploy-keys
+          emptyDir:
+            sizeLimit: 1Mi
+        - name: policy-runtime
+          emptyDir:
+            sizeLimit: 4Mi
+        {{- if and .Values.policyBundle.verify (not .Values.policyBundle.keyless) }}
+        - name: policy-pub
+          configMap:
+            name: policy-pub-key
+            defaultMode: 0444
+            optional: true
+        {{- end }}
+        {{- if .Values.runner.giteaApiToken }}
+        - name: gitea-api-token
+          secret:
+            secretName: {{ .Values.runner.giteaApiToken.secretName }}
+            defaultMode: 0400
+            optional: true
+        {{- end }}
+        {{- if .Values.runner.githubApp }}
+        - name: github-app
+          secret:
+            secretName: {{ .Values.runner.githubApp.secretName }}
+            defaultMode: 0400
+            optional: true
+        {{- end }}
