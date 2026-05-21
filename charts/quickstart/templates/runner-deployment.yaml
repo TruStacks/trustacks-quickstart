@@ -81,7 +81,12 @@ spec:
         - name: load-policy-bundle
           image: "{{ .Values.image.runner.repository }}:{{ .Values.image.runner.tag }}"
           imagePullPolicy: {{ .Values.image.runner.pullPolicy }}
-          command: ["/bin/sh", "-c"]
+          # Use bash explicitly — the script below uses `local`
+          # declarations + process substitution `< <(...)` which dash
+          # (the default `/bin/sh` on Debian, the runner image's base)
+          # doesn't parse. The runner image is python:3.12-slim which
+          # has /bin/bash by default.
+          command: ["/bin/bash", "-c"]
           args:
             - |
               set -u
@@ -89,23 +94,30 @@ spec:
               {{- $allowHttp := ternary "--allow-http-registry " "" .Values.policyBundle.insecure }}
 
               # ---- Helpers -------------------------------------------
-              # Resolve a tag-form OCI ref to its current digest.
-              # Echoes the digest on success; non-zero exit on failure.
-              # Used to anchor pull + verify to the same bytes — anti-
-              # TOCTOU if the tag is rewritten between the two.
-              resolve_digest() {
+              # Return an OCI ref pinned to a content digest. If the
+              # input ref is already in `<repo>@<digest>` form, returns
+              # it unchanged. Otherwise resolves the tag to a digest
+              # via `oras resolve` and returns `<repo>@<digest>`. Empty
+              # output = resolve failed (caller falls back).
+              # Pinning matters because we use the same ref for `oras
+              # pull` AND `cosign verify` — a tag retag between the two
+              # could slip un-verified bytes through.
+              pin_ref() {
                 local ref="$1"
-                oras resolve {{ $orasFlags }}"$ref" 2>/dev/null
-              }
-
-              # Strip the :tag suffix from a tag-form ref so we can
-              # append @<digest>. Assumes tag-form input (the chart's
-              # values.yaml default); a digest-form input would not
-              # reach this helper because resolve_digest's caller would
-              # use the ref unchanged.
-              repo_of() {
-                local ref="$1"
-                echo "${ref%:*}"
+                case "$ref" in
+                  *@sha256:*)
+                    # Already digest-pinned; use as-is.
+                    printf '%s' "$ref"
+                    ;;
+                  *)
+                    local digest
+                    digest="$(oras resolve {{ $orasFlags }}"$ref" 2>/dev/null)"
+                    if [ -n "$digest" ]; then
+                      # Strip the :tag suffix and append the resolved digest.
+                      printf '%s@%s' "${ref%:*}" "$digest"
+                    fi
+                    ;;
+                esac
               }
 
               # Extract every .tar.gz under $1; on any tar failure,
@@ -133,14 +145,11 @@ spec:
               # ---- Constitution --------------------------------------
               mkdir -p /policy-runtime/constitution
               CONST_REF={{ .Values.policyBundle.bundleRef | quote }}
-              CONST_DIGEST="$(resolve_digest "$CONST_REF" || true)"
-              if [ -z "$CONST_DIGEST" ]; then
-                echo "[load-policy-bundle] constitution oras resolve failed for $CONST_REF — falling back to image-baked /etc/trustacks/policy"
+              CONST_PINNED="$(pin_ref "$CONST_REF")"
+              if [ -z "$CONST_PINNED" ]; then
+                echo "[load-policy-bundle] constitution ref resolution failed for $CONST_REF — falling back to image-baked /etc/trustacks/policy"
                 rm -rf /policy-runtime/constitution
               else
-                # Pin to digest for both pull and verify so a retag
-                # between the two can't slip un-verified bytes through.
-                CONST_PINNED="$(repo_of "$CONST_REF")@$CONST_DIGEST"
                 if ! oras pull {{ $orasFlags }}-o /policy-runtime/constitution "$CONST_PINNED"; then
                   echo "[load-policy-bundle] constitution oras pull failed for $CONST_PINNED — falling back to image-baked /etc/trustacks/policy"
                   rm -rf /policy-runtime/constitution
@@ -157,7 +166,7 @@ spec:
                     echo "[load-policy-bundle] constitution cosign keyless verify FAILED — falling back to image-baked /etc/trustacks/policy"
                     rm -rf /policy-runtime/constitution
                   else
-                    echo "[load-policy-bundle] constitution cosign keyless verify OK ($CONST_DIGEST)"
+                    echo "[load-policy-bundle] constitution cosign keyless verify OK ($CONST_PINNED)"
                   fi
                   {{- else }}
                   # Keyed verify path — used by the mvp full install
@@ -172,7 +181,7 @@ spec:
                     echo "[load-policy-bundle] constitution cosign keyed verify FAILED — falling back to image-baked /etc/trustacks/policy"
                     rm -rf /policy-runtime/constitution
                   else
-                    echo "[load-policy-bundle] constitution cosign keyed verify OK ($CONST_DIGEST)"
+                    echo "[load-policy-bundle] constitution cosign keyed verify OK ($CONST_PINNED)"
                   fi
                   {{- end }}
                   {{- else }}
@@ -190,12 +199,11 @@ spec:
               # ---- Customer overlay (optional) -----------------------
               mkdir -p /policy-runtime/overlay
               OVERLAY_REF={{ .Values.policyBundle.overlayRef | quote }}
-              OVERLAY_DIGEST="$(resolve_digest "$OVERLAY_REF" || true)"
-              if [ -z "$OVERLAY_DIGEST" ]; then
-                echo "[load-policy-bundle] overlay oras resolve failed for $OVERLAY_REF — skipping overlay (constitution still active)"
+              OVERLAY_PINNED="$(pin_ref "$OVERLAY_REF")"
+              if [ -z "$OVERLAY_PINNED" ]; then
+                echo "[load-policy-bundle] overlay ref resolution failed for $OVERLAY_REF — skipping overlay (constitution still active)"
                 rm -rf /policy-runtime/overlay
               else
-                OVERLAY_PINNED="$(repo_of "$OVERLAY_REF")@$OVERLAY_DIGEST"
                 if ! oras pull {{ $orasFlags }}-o /policy-runtime/overlay "$OVERLAY_PINNED"; then
                   echo "[load-policy-bundle] overlay oras pull failed for $OVERLAY_PINNED — skipping overlay"
                   rm -rf /policy-runtime/overlay
@@ -209,7 +217,7 @@ spec:
                     echo "[load-policy-bundle] overlay cosign keyless verify FAILED — skipping overlay"
                     rm -rf /policy-runtime/overlay
                   else
-                    echo "[load-policy-bundle] overlay cosign keyless verify OK ($OVERLAY_DIGEST)"
+                    echo "[load-policy-bundle] overlay cosign keyless verify OK ($OVERLAY_PINNED)"
                   fi
                   {{- else }}
                   if ! cosign verify --insecure-ignore-tlog {{ $allowHttp }}\
@@ -218,7 +226,7 @@ spec:
                     echo "[load-policy-bundle] overlay cosign keyed verify FAILED — skipping overlay"
                     rm -rf /policy-runtime/overlay
                   else
-                    echo "[load-policy-bundle] overlay cosign keyed verify OK ($OVERLAY_DIGEST)"
+                    echo "[load-policy-bundle] overlay cosign keyed verify OK ($OVERLAY_PINNED)"
                   fi
                   {{- end }}
                   {{- end }}
