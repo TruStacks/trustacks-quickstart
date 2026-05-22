@@ -20,7 +20,7 @@ After `bootstrap.sh` completes:
 | **Gitea** | `http://gitea.localtest.me:8080` | In-cluster Git host with the four pre-seeded sample repos |
 | **ArgoCD** | `http://argocd.localtest.me:8080` | Watches the platform repo, syncs Applications you merge |
 
-Four sample apps in `samples/` get pushed to Gitea automatically (per `helm/values-quickstart.yaml`):
+Four sample apps in `samples/` get pushed to Gitea automatically by `bootstrap.sh`:
 
 - `fastapi-hello` — Python / FastAPI
 - `spring-boot-hello` — Java / Spring Boot
@@ -65,25 +65,35 @@ TRUSTACKS_VERSION=0.1.0 \
 
 ## Supply-chain verification
 
-Every TruStacks image is signed via Sigstore keyless OIDC. Verify before you trust:
+Every TruStacks image AND the constitution Rego bundle are Sigstore-signed via keyless OIDC against the publish workflows' GitHub Actions identities. Verify before you trust:
 
 ```sh
+# Container images (control-plane / runner / ui)
 cosign verify \
   --certificate-identity-regexp \
-    'https://github.com/trustacks/trustacks-mvp/.github/workflows/publish-images.yml@.*' \
+    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-images.yml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/trustacks/runner:0.1.0
+  ghcr.io/trustacks/runner:0.1.2
+
+# Constitution Rego bundle
+cosign verify \
+  --certificate-identity-regexp \
+    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/trustacks/policy/constitution:0.1.2
 ```
+
+The runner's `load-policy-bundle` init container performs the equivalent bundle verification at pod startup — verification failures block extract and fall back to the rego baked into the image.
 
 SBOMs:
 
 ```sh
 docker buildx imagetools inspect \
-  ghcr.io/trustacks/runner:0.1.0 \
+  ghcr.io/trustacks/runner:0.1.2 \
   --format '{{ json .SBOM }}'
 ```
 
-The signing identity is the publish workflow at `trustacks/trustacks-mvp/.github/workflows/publish-images.yml`. If verification fails, **don't run the image** — report to `security@trustacks.com`.
+The signing identities are the publish workflows at `TruStacks/trustacks-mvp/.github/workflows/{publish-images,publish-policy}.yml`. If verification fails, **don't run the artifact** — report to `security@trustacks.com`.
 
 ---
 
