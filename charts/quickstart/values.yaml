@@ -1,0 +1,244 @@
+# TruStacks quickstart chart values.
+#
+# These defaults assume the workshop topology — all three TruStacks
+# services + gitea + ArgoCD on a single k3d node, accessed via
+# *.localtest.me at port 8080 (k3d's built-in ServiceLB → traefik).
+# Override via `helm install -f values-override.yaml` for non-k3d
+# clusters or different ingress shapes.
+
+# Topology marker. The workshop chart is the "all-in-one" install path:
+# CP + runner + UI all on the customer's cluster, self-contained, no
+# SaaS dependency. The production Developer-tier SaaS chart (post-Slice
+# 23) will set this to `saas-edge` and disable the cp/ui deployments
+# entirely. Don't change this in the workshop chart — it's a doc cue,
+# not a behavior flag.
+mode: workshop
+
+# ---------------------------------------------------------------------
+# Images
+# ---------------------------------------------------------------------
+# Defaults pull from public GHCR (`:latest`) — anyone can `helm install`
+# anonymously. Pin a specific version (e.g., "0.1.0") for procurement
+# or for reproducible workshop runs.
+
+image:
+  controlPlane:
+    repository: ghcr.io/trustacks/control-plane
+    tag: latest
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
+  runner:
+    repository: ghcr.io/trustacks/runner
+    tag: latest
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
+  ui:
+    repository: ghcr.io/trustacks/ui
+    tag: latest
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
+
+replicas:
+  controlPlane: 1
+  runner: 1
+  ui: 1
+
+# ---------------------------------------------------------------------
+# Ingress — `*.localtest.me` resolves to 127.0.0.1 by design, so this
+# layout works out-of-the-box with k3d's --port "8080:80@loadbalancer"
+# flag (set in bootstrap.sh).
+# ---------------------------------------------------------------------
+
+ingress:
+  enabled: true
+  className: traefik
+  hostnameSuffix: localtest.me
+
+# ---------------------------------------------------------------------
+# Constitution Rego bundle — Candidate O Phase A2.1 publishes this to
+# public GHCR alongside each release. The runner's init container pulls
+# + cosign-keyless-verifies before extract.
+# ---------------------------------------------------------------------
+
+policyBundle:
+  # Pin to a specific bundle version for reproducible workshops; switch
+  # to `latest` if you want the chart to track the most recent stable
+  # release across helm upgrades.
+  bundleRef: ghcr.io/trustacks/policy/constitution:0.1.0
+
+  # No customer overlay in the workshop chart — the constitution-only
+  # default already produces visible Behaviors + maturity scoring for
+  # the demo flow. Set this to a customer's overlay ref to layer their
+  # rules on top.
+  overlayRef: ""
+
+  # `insecure: false` — GHCR is HTTPS, no plain-http fallback needed
+  # like the mvp full-install's in-cluster Zot path.
+  insecure: false
+
+  # Keyless OIDC verification against the publish-policy workflow's
+  # GitHub Actions identity (Candidate O Phase A2.1). No public key
+  # to distribute; signature identity = workflow URL recorded in
+  # Sigstore Fulcio + Rekor.
+  verify: true
+  keyless:
+    # Restrict to refs the publish workflow actually fires on
+    # (semver tag pushes, per `.github/workflows/publish-policy.yml`'s
+    # `on: push: tags: v*.*.*`). The workflow itself rejects non-tag
+    # refs at the version-resolution step, but tightening the
+    # verification regex is defense-in-depth — a misconfigured or
+    # post-hoc workflow run on a branch can't produce a verify-pass
+    # bundle even if it somehow got signed.
+    certificateIdentityRegexp: 'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+    certificateOidcIssuer: https://token.actions.githubusercontent.com
+
+# ---------------------------------------------------------------------
+# LLM provider — Slice 23.6 BYO key flow. Workshop attendees paste
+# their Anthropic or OpenRouter key into the UI's Settings → LLM
+# Provider page at first /audit. Nothing baked in at install time.
+# ---------------------------------------------------------------------
+
+llm:
+  # `anthropic` (default) or `openrouter`; both route to Claude Sonnet
+  # 4.5+ per ADR-0020. The customer's choice is over billing
+  # relationship, not model selection.
+  provider: anthropic
+  # `true` = quickstart-mode (always BYO); `false` would mean the chart
+  # injects a key from a pre-provisioned Secret. The hosted-SaaS path
+  # uses `false` with a managed-Anthropic-Workspace key.
+  byoKey: true
+
+# ---------------------------------------------------------------------
+# Samples — pre-seed gitea with the four polyglot hello-world repos so
+# the agent has something to /audit + /plan against. Workshop attendees
+# can also connect their own repo via the Connect-a-repo wizard.
+# ---------------------------------------------------------------------
+
+samples:
+  seed: true
+  repos:
+    - fastapi-hello
+    - spring-boot-hello
+    - dotnet-hello
+    - go-hello
+
+# ---------------------------------------------------------------------
+# gitea subchart — git provider hosted in-cluster. Workshop attendees
+# see the agent's emitted PRs land here. ArgoCD watches the same gitea
+# for the platform repo.
+# ---------------------------------------------------------------------
+
+gitea:
+  enabled: true
+  gitea:
+    admin:
+      username: trustacks
+      password: trustacks-dev
+      email: admin@trustacks.local
+    config:
+      database:
+        DB_TYPE: sqlite3
+      session:
+        PROVIDER: memory
+      cache:
+        ADAPTER: memory
+      queue:
+        TYPE: level
+      server:
+        ROOT_URL: http://gitea.localtest.me:8080/
+        DOMAIN: gitea.localtest.me
+  postgresql:
+    enabled: false
+  postgresql-ha:
+    enabled: false
+  redis-cluster:
+    enabled: false
+  persistence:
+    enabled: false
+
+# ---------------------------------------------------------------------
+# ArgoCD subchart — closes the demo loop. Once the agent's PR merges in
+# gitea, ArgoCD syncs the platform repo and the customer's service
+# deploys.
+# ---------------------------------------------------------------------
+
+argo-cd:
+  enabled: true
+  configs:
+    params:
+      server.insecure: true
+  server:
+    extraArgs:
+      - --insecure
+  controller:
+    metrics:
+      enabled: false
+  redis:
+    enabled: true
+  notifications:
+    enabled: false
+
+# ---------------------------------------------------------------------
+# Runner-specific (mirrors mvp/charts/runner/values.yaml where the
+# shape is shared, drops customer-specific knobs the workshop doesn't
+# need).
+# ---------------------------------------------------------------------
+
+runner:
+  # Legacy LLM Secret — bootstrap-import source on CP first boot. The
+  # CP rewrites `llmSecretName` once the customer saves a config via
+  # Settings → LLM Provider. Optional; fresh-cluster install OK.
+  secretName: trustacks-runner-secrets
+  llmSecretName: trustacks-runner-llm
+
+  env:
+    TRUSTACKS_RUNNER_LOG_LEVEL: INFO
+    TRUSTACKS_RUNNER_CONTROL_PLANE_URL: http://control-plane.trustacks-system.svc.cluster.local:8000
+
+  deployKeyLoader:
+    image: alpine/k8s:1.31.4
+    # `Always` paired with `:latest` so a `helm upgrade` after the
+    # workshop image moves picks the new digest. For pinned tags
+    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
+    # immutable so the pull cost on every restart is wasted.
+    pullPolicy: Always
+
+  giteaApiToken:
+    secretName: gitea-api-token
+    secretKey: token
+
+  # GitHub App credentials — present in the chart so the Connect-a-repo
+  # GitHub-provider flow works if the customer registers an App and
+  # provisions the Secret manually. The workshop's primary git path is
+  # the in-cluster gitea, so this is rarely populated.
+  githubApp:
+    secretName: trustacks-github-app
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "control-plane") | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas.controlPlane }}
+  selector:
+    matchLabels: {{- include "quickstart.serviceSelectorLabels" (dict "service" "control-plane") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "quickstart.serviceSelectorLabels" (dict "service" "control-plane") | nindent 8 }}
+    spec:
+      serviceAccountName: control-plane
+      containers:
+        - name: control-plane
+          image: "{{ .Values.image.controlPlane.repository }}:{{ .Values.image.controlPlane.tag }}"
+          imagePullPolicy: {{ .Values.image.controlPlane.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: TRUSTACKS_CP_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: TRUSTACKS_CP_RUNNER_DEPLOYMENT
+              # Runner Deployment name in this chart — see runner-deployment.yaml.
+              value: runner
+          volumeMounts:
+            - name: gitea-api-token
+              mountPath: /var/run/secrets/gitea
+              readOnly: true
+            - name: github-app
+              mountPath: /var/run/secrets/github-app
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        # In-cluster gitea API token — provisioned by sample-seed-job
+        # alongside the polyglot repo seed, mounted optional so the CP
+        # pod starts cleanly before the Job has run.
+        - name: gitea-api-token
+          secret:
+            secretName: gitea-api-token
+            defaultMode: 0400
+            optional: true
+        # GitHub App credentials — workshop attendees typically don't
+        # register their own App, so this Secret is rarely populated.
+        # Optional mount means CP starts cleanly without it; the
+        # GitHub-provider connect-a-repo path returns 503 until the
+        # Secret exists.
+        - name: github-app
+          secret:
+            secretName: trustacks-github-app
+            defaultMode: 0400
+            optional: true

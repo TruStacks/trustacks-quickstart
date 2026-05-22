@@ -1,0 +1,50 @@
+{{/*
+Control-plane SA + Role + RoleBinding.
+
+The CP needs K8s API access in its own namespace to:
+- create/update/delete Secrets labeled `trustacks.io/role=git-deploy-key`
+  (per-repo SSH deploy keys, materialized by the runner's init container)
+- patch Deployments to roll the runner after a Secret rewrite (BYO LLM
+  key flow per Slice 23.6; Connect-a-repo wizard's per-service binding)
+
+`update` is required on Secrets — replace_namespaced_secret (PUT) is used
+by the BYO LLM key rotation flow. `patch` alone wouldn't be enough; K8s
+RBAC distinguishes patch (partial) from update (full).
+
+Mirrors the RBAC from trustacks-mvp/scripts/bootstrap-k3d.sh's CP heredoc.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: control-plane
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "control-plane") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: control-plane
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "control-plane") | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "list", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: control-plane
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "control-plane") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: control-plane
+subjects:
+  - kind: ServiceAccount
+    name: control-plane
+    namespace: {{ .Release.Namespace }}

@@ -1,0 +1,124 @@
+{{- if .Values.ingress.enabled }}
+{{/*
+Ingress for the five user-facing endpoints. k3d's --port
+"8080:80@loadbalancer" forwards localhost:8080 to traefik, which routes
+by Host header. *.localtest.me resolves to 127.0.0.1 by design, so the
+five hosts below all work from the workshop attendee's browser:
+
+  http://ui.localtest.me:8080         — the React app (chat, /audit, /plan, /stack, settings)
+  http://cp.localtest.me:8080         — the FastAPI control plane (mostly for debugging)
+  http://runner.localtest.me:8080     — the runner's SSE endpoint (mostly for debugging)
+  http://gitea.localtest.me:8080      — in-cluster Gitea (where the agent's PRs land)
+  http://argocd.localtest.me:8080     — ArgoCD UI (syncs merged PRs to the cluster)
+*/}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ui
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "ui") | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "quickstart.host" (dict "ctx" . "prefix" "ui") }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ui
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: control-plane
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "control-plane") | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "quickstart.host" (dict "ctx" . "prefix" "cp") }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: control-plane
+                port:
+                  number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: runner
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "runner") | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "quickstart.host" (dict "ctx" . "prefix" "runner") }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: runner
+                port:
+                  number: 8000
+{{- if index .Values "gitea" "enabled" }}
+---
+{{/*
+Gitea Ingress — points at the gitea-http Service in the gitea subchart's
+namespace. The subchart installs into `{{ .Release.Namespace }}-gitea`
+by default (gitea-charts convention), so we reference it with full
+DNS resolution rather than service-name only.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gitea
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "gitea") | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "quickstart.host" (dict "ctx" . "prefix" "gitea") }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-gitea-http
+                port:
+                  number: 3000
+{{- end }}
+{{- if index .Values "argo-cd" "enabled" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "quickstart.serviceLabels" (dict "ctx" . "service" "argocd") | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ include "quickstart.host" (dict "ctx" . "prefix" "argocd") }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-argocd-server
+                port:
+                  number: 80
+{{- end }}
+{{- end }}
