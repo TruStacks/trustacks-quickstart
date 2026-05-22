@@ -70,10 +70,13 @@ ingress:
 # ---------------------------------------------------------------------
 
 policyBundle:
-  # Pin to a specific bundle version for reproducible workshops; switch
-  # to `latest` if you want the chart to track the most recent stable
-  # release across helm upgrades.
-  bundleRef: ghcr.io/trustacks/policy/constitution:0.1.0
+  # Track `:latest` by default so a fresh workshop always serves the
+  # most recent stable bundle. The publish-policy workflow's prerelease
+  # guard ensures `:latest` only moves on stable v*.*.* tags, so this
+  # is safe — pre-release tags push the versioned tag only.
+  # Pin a specific version (e.g., `:0.1.2`) for reproducible workshops
+  # or procurement-pinned customers; override via --set on install.
+  bundleRef: ghcr.io/trustacks/policy/constitution:latest
 
   # No customer overlay in the workshop chart — the constitution-only
   # default already produces visible Behaviors + maturity scoring for
