@@ -109,7 +109,7 @@ helm dep update "${CHART_DIR}" >/dev/null
 
 say "installing TruStacks chart at version ${BOLD}${VERSION}${RESET}…"
 # All three images + the policy bundle pin to the same VERSION env var
-# so a `TRUSTACKS_VERSION=0.1.2 ./bootstrap.sh` invocation gets a fully
+# so a `TRUSTACKS_VERSION=0.1.3 ./bootstrap.sh` invocation gets a fully
 # coherent release across both image families and the policy bundle.
 # Default `latest` is fine for ad-hoc workshop runs.
 POLICY_BUNDLE_REF="ghcr.io/trustacks/policy/constitution:${VERSION}"
