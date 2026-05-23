@@ -70,7 +70,6 @@ else
     say "creating k3d cluster '${CLUSTER_NAME}' (this is the only step that needs sudo on some systems)"
     k3d cluster create "${CLUSTER_NAME}" \
         --port "8080:80@loadbalancer" \
-        --k3s-arg "--disable=traefik@server:0" \
         --wait
 fi
 
