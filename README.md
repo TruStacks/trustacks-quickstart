@@ -51,13 +51,13 @@ Most quickstart users won't need to change anything. For procurement or pinned-v
 
 | Environment variable | Default | What it does |
 |----------------------|---------|--------------|
-| `TRUSTACKS_VERSION` | `latest` | Image tag pulled from `ghcr.io/trustacks/*`. Set to a specific semver (e.g., `0.1.0`) for reproducible installs. |
+| `TRUSTACKS_VERSION` | `latest` | Image tag pulled from `ghcr.io/trustacks/*`. Set to a specific semver (e.g., `0.1.3`) for reproducible installs. |
 | `TRUSTACKS_CLUSTER_NAME` | `trustacks` | k3d cluster name. Change if you already have a cluster called `trustacks`. |
 | `ANTHROPIC_API_KEY` | (unset) | Optional — if set, will be applied at install. Otherwise the UI prompts you. |
 
 ```sh
 # Reproducible pinned install
-TRUSTACKS_VERSION=0.1.0 \
+TRUSTACKS_VERSION=0.1.3 \
     curl -fsSL https://trustacks.com/install | bash
 ```
 
@@ -71,16 +71,16 @@ Every TruStacks image AND the constitution Rego bundle are Sigstore-signed via k
 # Container images (control-plane / runner / ui)
 cosign verify \
   --certificate-identity-regexp \
-    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-images.yml@.*' \
+    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-images.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/trustacks/runner:0.1.2
+  ghcr.io/trustacks/runner:0.1.3
 
 # Constitution Rego bundle
 cosign verify \
   --certificate-identity-regexp \
-    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@.*' \
+    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/trustacks/policy/constitution:0.1.2
+  ghcr.io/trustacks/policy/constitution:0.1.3
 ```
 
 The runner's `load-policy-bundle` init container performs the equivalent bundle verification at pod startup — verification failures block extract and fall back to the rego baked into the image.
@@ -89,7 +89,7 @@ SBOMs:
 
 ```sh
 docker buildx imagetools inspect \
-  ghcr.io/trustacks/runner:0.1.2 \
+  ghcr.io/trustacks/runner:0.1.3 \
   --format '{{ json .SBOM }}'
 ```
 
