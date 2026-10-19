@@ -58,8 +58,8 @@ Most quickstart users won't need to change anything. For procurement or pinned-v
 
 ```sh
 # Reproducible pinned install
-TRUSTACKS_VERSION=0.2.14 TRUSTACKS_POLICY_VERSION=1.3.0 \
-    curl -fsSL https://trustacks.com/install | bash
+curl -fsSL https://trustacks.com/install | \
+    TRUSTACKS_VERSION=0.2.14 TRUSTACKS_POLICY_VERSION=1.3.0 bash
 ```
 
 ---
