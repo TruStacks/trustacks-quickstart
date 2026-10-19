@@ -51,13 +51,14 @@ Most quickstart users won't need to change anything. For procurement or pinned-v
 
 | Environment variable | Default | What it does |
 |----------------------|---------|--------------|
-| `TRUSTACKS_VERSION` | `latest` | Image tag pulled from `ghcr.io/trustacks/*`. Set to a specific semver (e.g., `0.1.3`) for reproducible installs. |
+| `TRUSTACKS_VERSION` | `latest` | Image tag pulled from `ghcr.io/trustacks/*`. Set to a specific semver (e.g., `0.2.14`) for reproducible installs. |
+| `TRUSTACKS_POLICY_VERSION` | `1` | Constitution bundle tag. The policy has its own semver (1.x); `1` follows the newest stable 1.x. Pin e.g. `1.3.0` for reproducible installs. |
 | `TRUSTACKS_CLUSTER_NAME` | `trustacks` | k3d cluster name. Change if you already have a cluster called `trustacks`. |
 | `ANTHROPIC_API_KEY` | (unset) | Optional — if set, will be applied at install. Otherwise the UI prompts you. |
 
 ```sh
 # Reproducible pinned install
-TRUSTACKS_VERSION=0.1.3 \
+TRUSTACKS_VERSION=0.2.14 TRUSTACKS_POLICY_VERSION=1.3.0 \
     curl -fsSL https://trustacks.com/install | bash
 ```
 
@@ -73,14 +74,14 @@ cosign verify \
   --certificate-identity-regexp \
     'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-images.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/trustacks/runner:0.1.3
+  ghcr.io/trustacks/runner:0.2.14
 
-# Constitution Rego bundle
+# Constitution Rego bundle (published from trustacks-policy, its own 1.x semver)
 cosign verify \
   --certificate-identity-regexp \
-    'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
+    '^https://github\.com/TruStacks/trustacks-policy/\.github/workflows/publish\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/trustacks/policy/constitution:0.1.3
+  ghcr.io/trustacks/policy/constitution:1.3.0
 ```
 
 The runner's `load-policy-bundle` init container performs the equivalent bundle verification at pod startup — verification failures block extract and fall back to the rego baked into the image.
@@ -89,7 +90,7 @@ SBOMs:
 
 ```sh
 docker buildx imagetools inspect \
-  ghcr.io/trustacks/runner:0.1.3 \
+  ghcr.io/trustacks/runner:0.2.14 \
   --format '{{ json .SBOM }}'
 ```
 

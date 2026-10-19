@@ -14,6 +14,8 @@
 # Knobs (all optional, picked up from env):
 #
 #   TRUSTACKS_VERSION       — image tag to pull. Defaults to "latest".
+#   TRUSTACKS_POLICY_VERSION — constitution bundle tag (its own 1.x semver).
+#                             Defaults to "1", the newest stable 1.x.
 #                             Pin to a specific semver for procurement.
 #   TRUSTACKS_CLUSTER_NAME  — k3d cluster name. Defaults to "trustacks".
 #   ANTHROPIC_API_KEY       — required at first /audit or /plan run.
@@ -51,6 +53,7 @@ die()  { printf '%s\n' "[fail] $*" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 
 VERSION="${TRUSTACKS_VERSION:-latest}"
+POLICY_VERSION="${TRUSTACKS_POLICY_VERSION:-1}"
 CLUSTER_NAME="${TRUSTACKS_CLUSTER_NAME:-trustacks}"
 
 CP_IMAGE="ghcr.io/trustacks/control-plane:${VERSION}"
@@ -108,11 +111,11 @@ say "fetching Helm subchart dependencies (gitea + argo-cd)…"
 helm dep update "${CHART_DIR}" >/dev/null
 
 say "installing TruStacks chart at version ${BOLD}${VERSION}${RESET}…"
-# All three images + the policy bundle pin to the same VERSION env var
-# so a `TRUSTACKS_VERSION=0.1.3 ./bootstrap.sh` invocation gets a fully
-# coherent release across both image families and the policy bundle.
-# Default `latest` is fine for ad-hoc workshop runs.
-POLICY_BUNDLE_REF="ghcr.io/trustacks/policy/constitution:${VERSION}"
+# The three images pin to VERSION. The constitution bundle has its own
+# semver (1.x, published from trustacks-policy), so it pins separately:
+# `constitution:${VERSION}` named a tag that has not existed since the
+# policy split, e.g. constitution:0.2.14.
+POLICY_BUNDLE_REF="ghcr.io/trustacks/policy/constitution:${POLICY_VERSION}"
 
 helm upgrade --install trustacks "${CHART_DIR}" \
     --namespace trustacks-system --create-namespace \
