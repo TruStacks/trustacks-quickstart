@@ -70,13 +70,11 @@ ingress:
 # ---------------------------------------------------------------------
 
 policyBundle:
-  # Track `:latest` by default so a fresh workshop always serves the
-  # most recent stable bundle. The publish-policy workflow's prerelease
-  # guard ensures `:latest` only moves on stable v*.*.* tags, so this
-  # is safe — pre-release tags push the versioned tag only.
-  # Pin a specific version (e.g., `:0.1.2`) for reproducible workshops
-  # or procurement-pinned customers; override via --set on install.
-  bundleRef: ghcr.io/trustacks/policy/constitution:latest
+  # The constitution is published from the trustacks-policy repo on its
+  # own semver (1.x), not the product's. Follow `:1` (the newest stable
+  # 1.x, what hosted runners follow) by default. Pin a specific version
+  # (e.g., `:1.3.0`) for reproducible workshops; override via --set.
+  bundleRef: ghcr.io/trustacks/policy/constitution:1
 
   # No customer overlay in the workshop chart — the constitution-only
   # default already produces visible Behaviors + maturity scoring for
@@ -88,20 +86,23 @@ policyBundle:
   # like the mvp full-install's in-cluster Zot path.
   insecure: false
 
-  # Keyless OIDC verification against the publish-policy workflow's
-  # GitHub Actions identity (Candidate O Phase A2.1). No public key
-  # to distribute; signature identity = workflow URL recorded in
-  # Sigstore Fulcio + Rekor.
+  # Keyless OIDC verification against the trustacks-policy publish
+  # workflow's GitHub Actions identity. No public key to distribute;
+  # signature identity = workflow URL recorded in Sigstore Fulcio + Rekor.
+  #
+  # This used to name trustacks-mvp's publish-policy.yml, the signer
+  # retired when the policy moved to its own repo (ADR-0058). Bundles
+  # signed by trustacks-policy then failed verification and every
+  # install silently fell back to the policy baked into the image.
   verify: true
   keyless:
     # Restrict to refs the publish workflow actually fires on
-    # (semver tag pushes, per `.github/workflows/publish-policy.yml`'s
-    # `on: push: tags: v*.*.*`). The workflow itself rejects non-tag
+    # (semver tag pushes in trustacks-policy). The workflow itself rejects non-tag
     # refs at the version-resolution step, but tightening the
     # verification regex is defense-in-depth — a misconfigured or
     # post-hoc workflow run on a branch can't produce a verify-pass
     # bundle even if it somehow got signed.
-    certificateIdentityRegexp: 'https://github.com/TruStacks/trustacks-mvp/.github/workflows/publish-policy.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+    certificateIdentityRegexp: '^https://github\.com/TruStacks/trustacks-policy/\.github/workflows/publish\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
     certificateOidcIssuer: https://token.actions.githubusercontent.com
 
 # ---------------------------------------------------------------------
