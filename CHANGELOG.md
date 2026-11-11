@@ -10,13 +10,18 @@ The `bootstrap.sh` script's `TRUSTACKS_VERSION` env var pins which trustacks-mvp
 
 | trustacks-mvp version | BYO-key flow (Settings → LLM Provider) | Notes |
 |---|---|---|
+| `0.2.23` and later | ❌ Control plane won't start | Every install signs in from 0.2.23 (trustacks-mvp ADR-0078): the control plane refuses to start without an OIDC issuer, and the quickstart doesn't install one yet. The default is pinned to `0.2.22` until it does. |
 | `0.1.3` (and later, once published) | ✅ Works end-to-end | Includes the kubernetes-python 36.x auth fix (trustacks-mvp #96). Use this for any new workshop install. |
 | `0.1.2` | ❌ UI key submission fails with HTTP 500 | The `PUT /api/llm-config` path returns `failed to write LLM Secret: ... 401 Unauthorized` due to a latent kubernetes-python regression in the CP image. Workaround: skip the UI and set the Secret directly — `kubectl -n trustacks-system create secret generic trustacks-runner-llm --from-literal=ANTHROPIC_API_KEY="<key>" --from-literal=LLM_PROVIDER=anthropic` followed by `kubectl -n trustacks-system rollout restart deployment/runner-runner`. |
 | `0.1.0` / `0.1.0-rc1` / `0.1.1` | ❌ Same as 0.1.2 | Same root cause. Same workaround if pinning to an older release is required. |
 
-Set `TRUSTACKS_VERSION=0.1.3` once it's published, or rely on the `:latest` default — the `:latest` tag advances only on stable releases per the publish workflow's pre-release guard.
+The default is pinned to `0.2.22`. Don't set `TRUSTACKS_VERSION=latest`: `:latest` advances on each stable release, and from 0.2.23 that image needs sign-in.
 
 ## [Unreleased]
+
+### Changed
+
+- Images default to `0.2.22` instead of `:latest`, with `IfNotPresent` pulls. From 0.2.23 the control plane requires an OIDC issuer, so following `:latest` would stop every quickstart install from starting, including existing ones the next time a pod restarts.
 
 ### Fixed
 

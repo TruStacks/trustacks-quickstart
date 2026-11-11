@@ -17,35 +17,30 @@ mode: workshop
 # ---------------------------------------------------------------------
 # Images
 # ---------------------------------------------------------------------
-# Defaults pull from public GHCR (`:latest`) — anyone can `helm install`
-# anonymously. Pin a specific version (e.g., "0.1.0") for procurement
-# or for reproducible workshop runs.
+# Defaults pull a pinned release from public GHCR — anyone can
+# `helm install` anonymously. Pinned at 0.2.22, the last release whose
+# control plane starts without an OIDC issuer: from 0.2.23 every install
+# signs in (trustacks-mvp ADR-0078), which this chart doesn't set up yet.
 
 image:
   controlPlane:
     repository: ghcr.io/trustacks/control-plane
-    tag: latest
-    # `Always` paired with `:latest` so a `helm upgrade` after the
-    # workshop image moves picks the new digest. For pinned tags
-    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
-    # immutable so the pull cost on every restart is wasted.
-    pullPolicy: Always
+    tag: "0.2.22"
+    # A pinned tag is immutable, so pulling it on every restart is wasted.
+    # Use `Always` only if you override the tag to `latest`.
+    pullPolicy: IfNotPresent
   runner:
     repository: ghcr.io/trustacks/runner
-    tag: latest
-    # `Always` paired with `:latest` so a `helm upgrade` after the
-    # workshop image moves picks the new digest. For pinned tags
-    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
-    # immutable so the pull cost on every restart is wasted.
-    pullPolicy: Always
+    tag: "0.2.22"
+    # A pinned tag is immutable, so pulling it on every restart is wasted.
+    # Use `Always` only if you override the tag to `latest`.
+    pullPolicy: IfNotPresent
   ui:
     repository: ghcr.io/trustacks/ui
-    tag: latest
-    # `Always` paired with `:latest` so a `helm upgrade` after the
-    # workshop image moves picks the new digest. For pinned tags
-    # (e.g., `0.1.0`), override to `IfNotPresent` — the tag is
-    # immutable so the pull cost on every restart is wasted.
-    pullPolicy: Always
+    tag: "0.2.22"
+    # A pinned tag is immutable, so pulling it on every restart is wasted.
+    # Use `Always` only if you override the tag to `latest`.
+    pullPolicy: IfNotPresent
 
 replicas:
   controlPlane: 1

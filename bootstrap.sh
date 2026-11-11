@@ -13,7 +13,8 @@
 #
 # Knobs (all optional, picked up from env):
 #
-#   TRUSTACKS_VERSION       — image tag to pull. Defaults to "latest".
+#   TRUSTACKS_VERSION       — image tag to pull. Defaults to "0.2.22", the last
+#                             release that starts without sign-in (see README).
 #   TRUSTACKS_POLICY_VERSION — constitution bundle tag (its own 1.x semver).
 #                             Defaults to "1", the newest stable 1.x.
 #                             Pin to a specific semver for procurement.
@@ -52,7 +53,7 @@ die()  { printf '%s\n' "[fail] $*" >&2; exit 1; }
 # Config
 # ---------------------------------------------------------------------------
 
-VERSION="${TRUSTACKS_VERSION:-latest}"
+VERSION="${TRUSTACKS_VERSION:-0.2.22}"
 POLICY_VERSION="${TRUSTACKS_POLICY_VERSION:-1}"
 CLUSTER_NAME="${TRUSTACKS_CLUSTER_NAME:-trustacks}"
 
