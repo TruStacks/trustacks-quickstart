@@ -18,26 +18,26 @@ mode: workshop
 # Images
 # ---------------------------------------------------------------------
 # Defaults pull a pinned release from public GHCR — anyone can
-# `helm install` anonymously. Pinned at 0.2.22, the last release whose
-# control plane starts without an OIDC issuer: from 0.2.23 every install
+# `helm install` anonymously. Pinned at 0.2.23, the last release whose
+# control plane starts without an OIDC issuer: from 0.2.24 every install
 # signs in (trustacks-mvp ADR-0078), which this chart doesn't set up yet.
 
 image:
   controlPlane:
     repository: ghcr.io/trustacks/control-plane
-    tag: "0.2.22"
+    tag: "0.2.23"
     # A pinned tag is immutable, so pulling it on every restart is wasted.
     # Use `Always` only if you override the tag to `latest`.
     pullPolicy: IfNotPresent
   runner:
     repository: ghcr.io/trustacks/runner
-    tag: "0.2.22"
+    tag: "0.2.23"
     # A pinned tag is immutable, so pulling it on every restart is wasted.
     # Use `Always` only if you override the tag to `latest`.
     pullPolicy: IfNotPresent
   ui:
     repository: ghcr.io/trustacks/ui
-    tag: "0.2.22"
+    tag: "0.2.23"
     # A pinned tag is immutable, so pulling it on every restart is wasted.
     # Use `Always` only if you override the tag to `latest`.
     pullPolicy: IfNotPresent
