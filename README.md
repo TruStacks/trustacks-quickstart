@@ -51,7 +51,7 @@ Most quickstart users won't need to change anything. For procurement or pinned-v
 
 | Environment variable | Default | What it does |
 |----------------------|---------|--------------|
-| `TRUSTACKS_VERSION` | `latest` | Image tag pulled from `ghcr.io/trustacks/*`. Set to a specific semver (e.g., `0.2.14`) for reproducible installs. |
+| `TRUSTACKS_VERSION` | `0.2.23` | Image tag pulled from `ghcr.io/trustacks/*`. Pinned because from 0.2.24 the control plane requires sign-in, which the quickstart doesn't set up yet; a later release won't start. |
 | `TRUSTACKS_POLICY_VERSION` | `1` | Constitution bundle tag. The policy has its own semver (1.x); `1` follows the newest stable 1.x. Pin e.g. `1.3.0` for reproducible installs. |
 | `TRUSTACKS_CLUSTER_NAME` | `trustacks` | k3d cluster name. Change if you already have a cluster called `trustacks`. |
 | `ANTHROPIC_API_KEY` | (unset) | Optional — if set, will be applied at install. Otherwise the UI prompts you. |

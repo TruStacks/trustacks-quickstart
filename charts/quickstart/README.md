@@ -41,9 +41,10 @@ your Anthropic or OpenRouter API key into Settings → LLM Provider.
 
 ## Pinning a specific version
 
-The chart defaults to `:latest` for all four OCI artifacts (control-plane,
-runner, UI images + the constitution Rego bundle). For reproducible
-workshop runs:
+The chart pins the control-plane, runner and UI images to `0.2.23`, the last
+release whose control plane starts without an OIDC issuer. From 0.2.24 every
+install signs in, which this chart doesn't set up yet. The constitution bundle
+follows `:1`. To pin everything explicitly:
 
 ```bash
 helm upgrade --install trustacks charts/quickstart \
